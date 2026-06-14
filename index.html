@@ -66,12 +66,8 @@
       </div>
     </div>
 
-    <!-- Clock / Current Time Display -->
+    <!-- Clock / Current Time Display (Removed Local Time) -->
     <div class="flex items-center gap-4">
-      <div class="text-right hidden sm:block">
-        <div class="text-xs text-white/60 font-semibold uppercase tracking-wider">Local Time</div>
-        <div id="local-clock" class="text-sm font-bold font-digital">12:00:00 PM</div>
-      </div>
       <button id="fullscreen-btn" class="p-2.5 rounded-lg bg-white/10 hover:bg-white/20 active:scale-95 transition-all text-white" title="Toggle Fullscreen">
         <i class="fa-solid fa-expand text-lg"></i>
       </button>
@@ -178,7 +174,7 @@
 
     <!-- PRIMARY ACTION BUTTONS -->
     <div class="flex flex-wrap gap-4 mt-8 justify-center w-full max-w-lg select-none">
-      <button id="btn-start" class="flex-1 min-w-[140px] py-4 px-6 rounded-2xl bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white font-bold text-lg shadow-xl shadow-indigo-600/20 flex items-center justify-center gap-3 transition-all">
+      <button id="btn-start" class="flex-1 min-w-[140px] py-4 px-6 rounded-2xl bg-[#92B574] hover:bg-[#7d9e62] active:scale-95 text-white font-bold text-lg shadow-xl shadow-[#92B574]/20 flex items-center justify-center gap-3 transition-all">
         <i class="fa-solid fa-play"></i> Start Timer
       </button>
       <button id="btn-pause" class="flex-1 min-w-[140px] py-4 px-6 rounded-2xl bg-slate-700 hover:bg-slate-600 active:scale-95 text-white font-bold text-lg shadow-lg flex items-center justify-center gap-3 transition-all hidden">
@@ -187,6 +183,21 @@
       <button id="btn-reset" class="py-4 px-6 rounded-2xl bg-slate-800 hover:bg-slate-700 active:scale-95 text-white/80 hover:text-white border border-white/10 font-bold text-lg flex items-center justify-center gap-3 transition-all">
         <i class="fa-solid fa-rotate-right"></i> Reset
       </button>
+    </div>
+
+    <!-- NEW MANUAL TIME ADJUSTMENT SECTION -->
+    <div id="add-time-controls" class="w-full max-w-lg mt-8 bg-[#F7F39E] backdrop-blur-md rounded-2xl p-6 border border-white/10 shadow-lg">
+      <div class="text-xs text-slate-700 font-bold uppercase tracking-wider mb-4 text-center">Add Time Manually</div>
+      <div class="flex flex-col sm:flex-row items-center gap-3">
+        <div class="flex gap-2 flex-1 w-full">
+          <input id="add-h" type="number" placeholder="H" class="w-full bg-slate-200 border border-slate-300 rounded-lg p-2 text-center text-slate-800 focus:ring-1 focus:ring-indigo-500 outline-none placeholder-slate-500">
+          <input id="add-m" type="number" placeholder="M" class="w-full bg-slate-200 border border-slate-300 rounded-lg p-2 text-center text-slate-800 focus:ring-1 focus:ring-indigo-500 outline-none placeholder-slate-500">
+          <input id="add-s" type="number" placeholder="S" class="w-full bg-slate-200 border border-slate-300 rounded-lg p-2 text-center text-slate-800 focus:ring-1 focus:ring-indigo-500 outline-none placeholder-slate-500">
+        </div>
+        <button id="btn-add-time" class="py-2 px-6 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold transition-all whitespace-nowrap">
+          Add Time
+        </button>
+      </div>
     </div>
 
   </main>
@@ -706,6 +717,51 @@
     btnPause.addEventListener('click', pauseTimer);
     btnReset.addEventListener('click', resetTimer);
 
+    // ADD TIME LOGIC
+    const addH = document.getElementById('add-h');
+    const addM = document.getElementById('add-m');
+    const addS = document.getElementById('add-s');
+    const btnAddTime = document.getElementById('btn-add-time');
+
+    btnAddTime.addEventListener('click', () => {
+      const h = parseInt(addH.value) || 0;
+      const m = parseInt(addM.value) || 0;
+      const s = parseInt(addS.value) || 0;
+      const totalToAdd = (h * 3600) + (m * 60) + s;
+
+      if (totalToAdd > 0) {
+        currentSeconds += totalToAdd;
+        // If it was finished, bring it back to life
+        if (timerState === 'finished') {
+          timerState = 'running';
+          btnStart.classList.add('hidden');
+          btnPause.classList.remove('hidden');
+          timerInterval = setInterval(() => {
+            if (isCountdown) {
+              if (currentSeconds > 0) {
+                currentSeconds--;
+                updateTimerDisplay();
+                if (currentSeconds <= 10 && currentSeconds > 0) audio.playSharpTick();
+              } else {
+                handleTimerComplete();
+              }
+            } else {
+              currentSeconds++;
+              updateTimerDisplay();
+            }
+          }, 1000);
+        }
+        
+        // Clear inputs
+        addH.value = '';
+        addM.value = '';
+        addS.value = '';
+        
+        updateTimerDisplay();
+        showToast(`Added ${h}h ${m}m ${s}s`);
+      }
+    });
+
     // Swap configurations through active loaded presets
     document.querySelectorAll('.preset-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {
@@ -777,21 +833,6 @@
       }
     });
 
-    // Sync current actual local clock display helper
-    function updateLocalClock() {
-      const now = new Date();
-      let hours = now.getHours();
-      const minutes = String(now.getMinutes()).padStart(2, '0');
-      const seconds = String(now.getSeconds()).padStart(2, '0');
-      const ampm = hours >= 12 ? 'PM' : 'AM';
-      hours = hours % 12 || 12;
-      document.getElementById('local-clock').textContent = `${hours}:${minutes}:${seconds} ${ampm}`;
-    }
-
-    // Initialize application local clock
-    updateLocalClock();
-    setInterval(updateLocalClock, 1000);
-    
     // Sync start elements
     formatInputsToTwoDigits();
     updateTimerDisplay();
