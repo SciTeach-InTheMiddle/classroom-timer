@@ -1,0 +1,800 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Classroom Activity Timer</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Font Awesome for Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <style>
+    /* Custom transition for background color to make state changes smooth and elegant */
+    .bg-transition {
+      transition: background-color 1.0s ease, color 0.5s ease, border-color 0.5s ease;
+    }
+    
+    /* Digital Clock Font styling */
+    .font-digital {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+
+    /* Steady pulse animation for the last 3 minutes of countdown */
+    @keyframes steady-flash {
+      0%, 100% { background-color: rgb(69, 10, 10); } /* Deep crimson bg-rose-950 */
+      50% { background-color: rgb(153, 27, 27); }     /* Bright warning red bg-red-800 */
+    }
+    .animate-steady-flash {
+      animation: steady-flash 2.0s infinite ease-in-out !important;
+    }
+
+    /* Rapid warning flashing for completed timer state */
+    @keyframes rapid-flash {
+      0%, 100% { background-color: rgb(185, 28, 28); } /* Red 700 */
+      50% { background-color: rgb(244, 63, 94); }      /* Rose 500 */
+    }
+    .animate-rapid-flash {
+      animation: rapid-flash 0.25s infinite ease-in-out !important;
+    }
+
+    /* Hide native spinner arrows on number inputs safely across all browsers */
+    input::-webkit-outer-spin-button,
+    input::-webkit-inner-spin-button {
+      -webkit-appearance: none;
+      margin: 0;
+    }
+    input[type=number] {
+      -moz-appearance: textfield;
+      appearance: textfield;
+    }
+  </style>
+</head>
+<body class="bg-transition bg-slate-900 text-white min-h-screen flex flex-col justify-between font-sans overflow-x-hidden">
+
+  <!-- TOP HEADER -->
+  <header class="p-4 flex justify-between items-center bg-black/20 backdrop-blur-sm border-b border-white/10 select-none">
+    <div class="flex items-center gap-3">
+      <div class="bg-indigo-600 p-2.5 rounded-lg flex items-center justify-center shadow-lg">
+        <i class="fa-solid fa-hourglass-half text-white text-xl"></i>
+      </div>
+      <div>
+        <h1 class="text-lg font-bold tracking-tight">Classroom Timer</h1>
+        <p class="text-xs text-white/70">Designed for Active Learning & Lesson Management</p>
+      </div>
+    </div>
+
+    <!-- Clock / Current Time Display -->
+    <div class="flex items-center gap-4">
+      <div class="text-right hidden sm:block">
+        <div class="text-xs text-white/60 font-semibold uppercase tracking-wider">Local Time</div>
+        <div id="local-clock" class="text-sm font-bold font-digital">12:00:00 PM</div>
+      </div>
+      <button id="fullscreen-btn" class="p-2.5 rounded-lg bg-white/10 hover:bg-white/20 active:scale-95 transition-all text-white" title="Toggle Fullscreen">
+        <i class="fa-solid fa-expand text-lg"></i>
+      </button>
+    </div>
+  </header>
+
+  <!-- MAIN TIMER CONTENT AREA -->
+  <main class="flex-1 flex flex-col items-center justify-center p-4 md:p-8 max-w-5xl mx-auto w-full">
+    
+    <!-- MODE SELECTOR TABS -->
+    <div id="mode-tabs" class="flex p-1 bg-black/30 rounded-xl mb-6 backdrop-blur-md w-full max-w-md border border-white/5 select-none">
+      <button id="tab-countdown" class="flex-1 py-2 px-4 rounded-lg font-semibold text-sm transition-all flex items-center justify-center gap-2 bg-indigo-600 text-white shadow">
+        <i class="fa-solid fa-stopwatch"></i> Countdown
+      </button>
+      <button id="tab-countup" class="flex-1 py-2 px-4 rounded-lg font-semibold text-sm transition-all flex items-center justify-center gap-2 text-white/70 hover:text-white hover:bg-white/5">
+        <i class="fa-solid fa-arrow-trend-up"></i> Count Up
+      </button>
+    </div>
+
+    <!-- DYNAMIC STATUS BANNER -->
+    <div id="status-banner" class="mb-4 px-6 py-2 rounded-full bg-white/10 backdrop-blur-sm border border-white/10 text-sm font-semibold tracking-wide uppercase flex items-center gap-2 select-none">
+      <span class="inline-block w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
+      Setup Mode
+    </div>
+
+    <!-- MAIN DIGITAL TIMER DISPLAY -->
+    <div class="w-full flex flex-col items-center justify-center my-2">
+      <!-- Added responsive padding and flexible max-width container -->
+      <div id="timer-box" class="bg-transition bg-slate-800/80 border-2 border-white/10 rounded-3xl p-6 md:p-12 shadow-2xl flex flex-col items-center justify-center w-full max-w-3xl min-h-[320px] md:min-h-[400px] relative overflow-hidden backdrop-blur-md">
+        
+        <!-- Subtle background glowing ring indicator -->
+        <div id="glow-ring" class="absolute inset-0 border-[6px] border-emerald-500/10 rounded-3xl pointer-events-none transition-all duration-1000"></div>
+
+        <!-- Big Display Area - Styled with flex-nowrap and relative spacing to guarantee no text wrapping or cutting off -->
+        <div id="display-time-wrapper" class="w-full flex justify-center items-center overflow-visible">
+          
+          <!-- Interactive Manual Inputs (Visible only when setting up, starts at 00:00:00) -->
+          <!-- Using explicit block widths to guarantee no clipping or visual truncation -->
+          <div id="timer-inputs" class="flex flex-nowrap items-center justify-center font-digital text-6xl sm:text-8xl md:text-9xl tracking-normal text-center overflow-visible">
+            <div class="flex flex-col items-center mx-1 sm:mx-2 md:mx-4">
+              <input id="input-h" type="text" inputmode="numeric" maxlength="2" value="00" class="bg-transparent text-center w-20 sm:w-28 md:w-36 focus:outline-none focus:border-b-4 focus:border-indigo-500 border-b-4 border-dashed border-white/20 py-1 sm:py-2 transition-all block overflow-visible" title="Hours">
+              <span class="text-[10px] sm:text-xs font-sans tracking-widest text-white/40 mt-1 uppercase font-semibold select-none">Hours</span>
+            </div>
+            <span class="text-white/40 self-start mt-2 sm:mt-4 md:mt-6 leading-none select-none">:</span>
+            <div class="flex flex-col items-center mx-1 sm:mx-2 md:mx-4">
+              <input id="input-m" type="text" inputmode="numeric" maxlength="2" value="00" class="bg-transparent text-center w-20 sm:w-28 md:w-36 focus:outline-none focus:border-b-4 focus:border-indigo-500 border-b-4 border-dashed border-white/20 py-1 sm:py-2 transition-all block overflow-visible" title="Minutes">
+              <span class="text-[10px] sm:text-xs font-sans tracking-widest text-white/40 mt-1 uppercase font-semibold select-none">Mins</span>
+            </div>
+            <span class="text-white/40 self-start mt-2 sm:mt-4 md:mt-6 leading-none select-none">:</span>
+            <div class="flex flex-col items-center mx-1 sm:mx-2 md:mx-4">
+              <input id="input-s" type="text" inputmode="numeric" maxlength="2" value="00" class="bg-transparent text-center w-20 sm:w-28 md:w-36 focus:outline-none focus:border-b-4 focus:border-indigo-500 border-b-4 border-dashed border-white/20 py-1 sm:py-2 transition-all block overflow-visible" title="Seconds">
+              <span class="text-[10px] sm:text-xs font-sans tracking-widest text-white/40 mt-1 uppercase font-semibold select-none">Secs</span>
+            </div>
+          </div>
+
+          <!-- Pure Locked Display (Used when timer runs, designed with custom font-sizes and absolute protection against truncation) -->
+          <div id="display-time-locked" class="hidden font-digital text-7xl sm:text-8xl md:text-9xl tracking-normal text-center select-none drop-shadow-[0_4px_12px_rgba(0,0,0,0.5)] whitespace-nowrap overflow-visible">
+            00:00:00
+          </div>
+
+          <!-- Big Giant Complete Notification (Times Up) -->
+          <div id="times-up-banner" class="hidden flex-col items-center justify-center py-4">
+            <div class="text-6xl sm:text-8xl md:text-[8rem] lg:text-[9.5rem] font-extrabold tracking-tight text-white drop-shadow-[0_10px_25px_rgba(0,0,0,0.85)] leading-none text-center select-none uppercase animate-pulse">
+              TIMES UP
+            </div>
+          </div>
+        </div>
+
+        <!-- Mode Indicator Text inside Box -->
+        <div id="timer-state-label" class="text-xs md:text-sm font-bold uppercase tracking-widest text-white/50 mt-6 text-center select-none">
+          Timer Ready • Tap any number above to edit
+        </div>
+
+        <!-- Visual Progress Bar (Only used during Countdown) -->
+        <div id="progress-container" class="w-full max-w-lg mt-8 bg-black/20 h-3 rounded-full overflow-hidden hidden border border-white/5">
+          <div id="progress-bar" class="h-full bg-gradient-to-r from-emerald-500 to-teal-400 w-full transition-all duration-300"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- PRESETS BLOCK (Easily accessible classroom defaults) -->
+    <div id="preset-controls" class="w-full max-w-lg mt-6 bg-slate-800/50 backdrop-blur-md rounded-2xl p-4 border border-white/5 shadow-lg select-none">
+      <div class="text-xs text-white/50 font-bold uppercase tracking-wider mb-2 text-center">Quick Classroom Presets</div>
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+        <button class="preset-btn py-2 px-3 rounded-lg bg-white/5 hover:bg-white/10 text-xs font-semibold border border-white/5 text-left transition-all flex flex-col justify-between" data-time="60">
+          <span class="text-indigo-400 mb-1"><i class="fa-solid fa-bolt"></i> Bell Ringer</span>
+          <span class="text-sm font-digital font-bold text-white">01:00</span>
+        </button>
+        <button class="preset-btn py-2 px-3 rounded-lg bg-white/5 hover:bg-white/10 text-xs font-semibold border border-white/5 text-left transition-all flex flex-col justify-between" data-time="300">
+          <span class="text-emerald-400 mb-1"><i class="fa-solid fa-users"></i> Quick Share</span>
+          <span class="text-sm font-digital font-bold text-white">05:00</span>
+        </button>
+        <!-- Replaced with a highly universal "Group Collaboration" matching all topics (math, reading, history, etc.) -->
+        <button class="preset-btn py-2 px-3 rounded-lg bg-white/5 hover:bg-white/10 text-xs font-semibold border border-white/5 text-left transition-all flex flex-col justify-between" data-time="900">
+          <span class="text-amber-400 mb-1"><i class="fa-solid fa-people-group"></i> Group Collaboration</span>
+          <span class="text-sm font-digital font-bold text-white">15:00</span>
+        </button>
+        <button class="preset-btn py-2 px-3 rounded-lg bg-white/5 hover:bg-white/10 text-xs font-semibold border border-white/5 text-left transition-all flex flex-col justify-between" data-time="1800">
+          <span class="text-rose-400 mb-1"><i class="fa-solid fa-pen-fancy"></i> Assessment</span>
+          <span class="text-sm font-digital font-bold text-white">30:00</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- PRIMARY ACTION BUTTONS -->
+    <div class="flex flex-wrap gap-4 mt-8 justify-center w-full max-w-lg select-none">
+      <button id="btn-start" class="flex-1 min-w-[140px] py-4 px-6 rounded-2xl bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white font-bold text-lg shadow-xl shadow-indigo-600/20 flex items-center justify-center gap-3 transition-all">
+        <i class="fa-solid fa-play"></i> Start Timer
+      </button>
+      <button id="btn-pause" class="flex-1 min-w-[140px] py-4 px-6 rounded-2xl bg-slate-700 hover:bg-slate-600 active:scale-95 text-white font-bold text-lg shadow-lg flex items-center justify-center gap-3 transition-all hidden">
+        <i class="fa-solid fa-pause"></i> Pause
+      </button>
+      <button id="btn-reset" class="py-4 px-6 rounded-2xl bg-slate-800 hover:bg-slate-700 active:scale-95 text-white/80 hover:text-white border border-white/10 font-bold text-lg flex items-center justify-center gap-3 transition-all">
+        <i class="fa-solid fa-rotate-right"></i> Reset
+      </button>
+    </div>
+
+  </main>
+
+  <!-- ALERTS & SOUND CONTROLLER BOTTOM PANEL -->
+  <footer class="p-4 bg-black/30 backdrop-blur-md border-t border-white/5 select-none">
+    <div class="max-w-4xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-4 text-xs text-white/50">
+      <div class="flex items-center gap-6">
+        <div class="flex items-center gap-2">
+          <i class="fa-solid fa-volume-high text-indigo-400"></i>
+          <span class="font-semibold">Alarm Sound:</span>
+          <select id="sound-select" class="bg-slate-800 text-white border border-white/10 rounded px-2 py-1 text-xs focus:ring-1 focus:ring-indigo-500 focus:outline-none">
+            <option value="school-bell">Traditional School Bell</option>
+            <option value="digital-alarm" selected>Digital Beep Alarm</option>
+            <option value="chime">Gentle Marimba Chime</option>
+            <option value="tada">Fanfare Success Chime</option>
+          </select>
+        </div>
+        <button id="btn-test-sound" class="text-indigo-400 hover:text-indigo-300 font-bold transition-colors">
+          <i class="fa-solid fa-volume-low"></i> Test Alarm
+        </button>
+      </div>
+
+      <div class="flex items-center gap-4">
+        <span>Press <kbd class="px-1.5 py-0.5 bg-white/10 rounded text-[10px] font-mono">Space</kbd> to Start/Pause</span>
+        <span>•</span>
+        <span>Press <kbd class="px-1.5 py-0.5 bg-white/10 rounded text-[10px] font-mono">R</kbd> to Reset</span>
+      </div>
+    </div>
+  </footer>
+
+  <!-- SIMPLE IN-APP NOTIFICATION TOAST -->
+  <div id="toast" class="fixed bottom-20 left-1/2 transform -translate-x-1/2 bg-black/90 text-white px-6 py-3 rounded-xl border border-white/10 shadow-2xl transition-all duration-300 ease-out translate-y-20 opacity-0 pointer-events-none flex items-center gap-3 max-w-sm z-50 select-none">
+    <i id="toast-icon" class="fa-solid fa-circle-info text-indigo-400 text-lg"></i>
+    <span id="toast-text" class="text-sm font-semibold">Message here</span>
+  </div>
+
+  <!-- AUDIO GENERATOR (Using Web Audio API so it plays on any machine out-of-the-box!) -->
+  <script>
+    class SoundEngine {
+      constructor() {
+        this.ctx = null;
+        this.alarmInterval = null;
+      }
+
+      init() {
+        if (!this.ctx) {
+          this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+      }
+
+      // Play a quick, clean individual audio beep
+      beep(frequency, duration, startTime, type = 'sine', volume = 0.3) {
+        this.init();
+        const osc = this.ctx.createOscillator();
+        const gainNode = this.ctx.createGain();
+        
+        osc.type = type;
+        osc.frequency.setValueAtTime(frequency, startTime);
+        
+        gainNode.gain.setValueAtTime(volume, startTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
+        
+        osc.connect(gainNode);
+        gainNode.connect(this.ctx.destination);
+        
+        osc.start(startTime);
+        osc.stop(startTime + duration);
+      }
+
+      // Plays a single sharp, high-frequency "tick" for the final 10 seconds countdown
+      playSharpTick() {
+        this.init();
+        if (this.ctx.state === 'suspended') {
+          this.ctx.resume();
+        }
+        const now = this.ctx.currentTime;
+        // High, piercing frequency with short duration for high "tick" impact
+        this.beep(1500, 0.08, now, 'sine', 0.4);
+      }
+
+      // Triggers a continuous, alarming pattern that loops for exactly 10 seconds
+      playAlarmingTimesUp(type) {
+        this.init();
+        if (this.ctx.state === 'suspended') {
+          this.ctx.resume();
+        }
+        
+        this.stopAlarm(); // Clear any running audio intervals
+
+        let elapsed = 0;
+        const intervalDelay = 400; // alternate every 400ms
+
+        this.alarmInterval = setInterval(() => {
+          const now = this.ctx.currentTime;
+          
+          if (type === 'digital-alarm') {
+            // Alternating fast dual beep
+            this.beep(880, 0.15, now, 'square', 0.25);
+            this.beep(1200, 0.15, now + 0.15, 'square', 0.25);
+          } else if (type === 'school-bell') {
+            // Rapid mechanical clang pattern
+            this.beep(440, 0.1, now, 'sawtooth', 0.2);
+            this.beep(460, 0.1, now + 0.05, 'triangle', 0.3);
+            this.beep(330, 0.1, now + 0.1, 'sawtooth', 0.2);
+          } else if (type === 'chime') {
+            // Sweeping fast chord
+            const notes = [261.63, 329.63, 392.00, 523.25];
+            notes.forEach((freq, idx) => {
+              this.beep(freq, 0.3, now + (idx * 0.05), 'triangle', 0.3);
+            });
+          } else { // tada / success
+            const notes = [523.25, 659.25, 783.99, 1046.50];
+            notes.forEach((freq, idx) => {
+              this.beep(freq, 0.2, now + (idx * 0.04), 'sine', 0.3);
+            });
+          }
+
+          elapsed += intervalDelay;
+          if (elapsed >= 10000) { // Limit automatically to exactly 10 seconds
+            this.stopAlarm();
+          }
+        }, intervalDelay);
+      }
+
+      stopAlarm() {
+        if (this.alarmInterval) {
+          clearInterval(this.alarmInterval);
+          this.alarmInterval = null;
+        }
+      }
+    }
+
+    const audio = new SoundEngine();
+  </script>
+
+  <!-- TIMER CONTROLLER LOGIC -->
+  <script>
+    // State Variables
+    let isCountdown = true;
+    let timerState = 'idle'; // 'idle', 'running', 'paused', 'finished'
+    let totalSeconds = 0;    // Configured initial setup time (00:00:00)
+    let currentSeconds = 0;  // Real-time remaining seconds
+    let timerInterval = null;
+
+    // Theme Variables for dynamic color shifts
+    const BG_THEMES = {
+      default: {
+        bodyClass: 'bg-slate-900',
+        timerBoxClass: 'bg-slate-800/80 border-white/10 text-white',
+        glowRingColor: 'border-indigo-500/10'
+      },
+      countingUp: {
+        bodyClass: 'bg-indigo-950',
+        timerBoxClass: 'bg-indigo-900/60 border-indigo-500/30 text-indigo-100',
+        glowRingColor: 'border-indigo-400/20'
+      },
+      green: {
+        bodyClass: 'bg-emerald-950',
+        timerBoxClass: 'bg-emerald-900/50 border-emerald-500/30 text-emerald-50',
+        glowRingColor: 'border-emerald-400/30'
+      }
+    };
+
+    // DOM Elements
+    const body = document.body;
+    const tabCountdown = document.getElementById('tab-countdown');
+    const tabCountup = document.getElementById('tab-countup');
+    const statusBanner = document.getElementById('status-banner');
+    const timerBox = document.getElementById('timer-box');
+    const glowRing = document.getElementById('glow-ring');
+    const displayTimeLocked = document.getElementById('display-time-locked');
+    const timerInputsContainer = document.getElementById('timer-inputs');
+    const timesUpBanner = document.getElementById('times-up-banner');
+    const timerStateLabel = document.getElementById('timer-state-label');
+    const progressContainer = document.getElementById('progress-container');
+    const progressBar = document.getElementById('progress-bar');
+    const presetControls = document.getElementById('preset-controls');
+    
+    // Core Digit Inputs
+    const inputH = document.getElementById('input-h');
+    const inputM = document.getElementById('input-m');
+    const inputS = document.getElementById('input-s');
+
+    // Controls Buttons
+    const btnStart = document.getElementById('btn-start');
+    const btnPause = document.getElementById('btn-pause');
+    const btnReset = document.getElementById('btn-reset');
+    const soundSelect = document.getElementById('sound-select');
+    const btnTestSound = document.getElementById('btn-test-sound');
+    const fullscreenBtn = document.getElementById('fullscreen-btn');
+
+    // Toast Elements
+    const toast = document.getElementById('toast');
+    const toastText = document.getElementById('toast-text');
+    const toastIcon = document.getElementById('toast-icon');
+
+    // Read clean, formatted, verified seconds from manual inputs
+    function getSecondsFromInputs() {
+      const h = parseInt(inputH.value) || 0;
+      const m = parseInt(inputM.value) || 0;
+      const s = parseInt(inputS.value) || 0;
+      return (h * 3600) + (m * 60) + s;
+    }
+
+    // Force values into perfect leading digit formatting
+    function formatInputsToTwoDigits() {
+      // Hours
+      let hVal = parseInt(inputH.value) || 0;
+      if (hVal < 0) hVal = 0;
+      if (hVal > 99) hVal = 99;
+      inputH.value = String(hVal).padStart(2, '0');
+
+      // Minutes
+      let mVal = parseInt(inputM.value) || 0;
+      if (mVal < 0) mVal = 0;
+      if (mVal > 59) mVal = 59;
+      inputM.value = String(mVal).padStart(2, '0');
+
+      // Seconds
+      let sVal = parseInt(inputS.value) || 0;
+      if (sVal < 0) sVal = 0;
+      if (sVal > 59) sVal = 59;
+      inputS.value = String(sVal).padStart(2, '0');
+
+      // Re-evaluate limits
+      if (timerState === 'idle') {
+        totalSeconds = getSecondsFromInputs();
+        currentSeconds = totalSeconds;
+      }
+    }
+
+    // Direct text entry filtering to allow only digits and prevent letters/symbols
+    [inputH, inputM, inputS].forEach(elem => {
+      elem.addEventListener('input', (e) => {
+        // Strip out non-numeric entries instantly
+        e.target.value = e.target.value.replace(/[^0-9]/g, '');
+        
+        // Truncate length manually beyond two characters
+        if (e.target.value.length > 2) {
+          e.target.value = e.target.value.slice(0, 2);
+        }
+        
+        // Dynamic live sync to solve countdown starting bugs immediately
+        if (timerState === 'idle') {
+          totalSeconds = getSecondsFromInputs();
+          currentSeconds = totalSeconds;
+          updateTimerDisplay();
+        }
+      });
+
+      // Pad zero when user clicks away from the box
+      elem.addEventListener('blur', () => {
+        formatInputsToTwoDigits();
+        updateTimerDisplay();
+      });
+
+      // Highlight text immediately upon focus to ease backspace edits
+      elem.addEventListener('focus', (e) => {
+        audio.init(); // Initialize audio safely on interaction
+        e.target.select();
+      });
+    });
+
+    // Convert numerical seconds to human display format
+    function formatTime(secs) {
+      const h = Math.floor(secs / 3600);
+      const m = Math.floor((secs % 3600) / 60);
+      const s = secs % 60;
+      return [
+        String(h).padStart(2, '0'),
+        String(m).padStart(2, '0'),
+        String(s).padStart(2, '0')
+      ].join(':');
+    }
+
+    // Displays dynamic toast notification
+    function showToast(message, isAlert = false) {
+      toastText.textContent = message;
+      if (isAlert) {
+        toastIcon.className = "fa-solid fa-bell text-rose-400 animate-bounce";
+      } else {
+        toastIcon.className = "fa-solid fa-circle-info text-indigo-400";
+      }
+      toast.classList.remove('translate-y-20', 'opacity-0');
+      toast.classList.add('translate-y-0', 'opacity-100');
+      setTimeout(() => {
+        toast.classList.add('translate-y-20', 'opacity-0');
+        toast.classList.remove('translate-y-0', 'opacity-100');
+      }, 4000);
+    }
+
+    // Re-evaluates entire display UI tree based on dynamic updates
+    function updateTimerDisplay() {
+      // Clear out previous warning animations
+      body.classList.remove('animate-steady-flash', 'animate-rapid-flash');
+
+      // Update Browser Title state
+      let stateIcon = timerState === 'running' ? '▶' : '⏸';
+      document.title = `${stateIcon} ${formatTime(currentSeconds)} | Classroom Timer`;
+
+      // Update ProgressBar
+      if (isCountdown && totalSeconds > 0) {
+        progressContainer.classList.remove('hidden');
+        const percentage = (currentSeconds / totalSeconds) * 100;
+        progressBar.style.width = `${percentage}%`;
+      } else {
+        progressContainer.classList.add('hidden');
+      }
+
+      // Handle Display states
+      if (timerState === 'finished') {
+        // Clear Setup elements
+        timerInputsContainer.classList.add('hidden');
+        displayTimeLocked.classList.add('hidden');
+        timesUpBanner.classList.remove('hidden');
+
+        // Apply visual extreme alarm triggers
+        body.classList.add('animate-rapid-flash');
+        
+        statusBanner.className = "mb-4 px-6 py-2 rounded-full bg-rose-600 animate-pulse text-sm font-semibold tracking-wide uppercase flex items-center gap-2 text-white shadow-xl";
+        statusBanner.innerHTML = `<i class="fa-solid fa-triangle-exclamation animate-bounce"></i> TIME'S UP!`;
+      } else {
+        timesUpBanner.classList.add('hidden');
+
+        if (timerState === 'idle') {
+          // Normal setup fields
+          timerInputsContainer.classList.remove('hidden');
+          displayTimeLocked.classList.add('hidden');
+          
+          applyTheme('default');
+          statusBanner.className = "mb-4 px-6 py-2 rounded-full bg-white/10 backdrop-blur-sm border border-white/10 text-sm font-semibold tracking-wide uppercase flex items-center gap-2 text-white/80";
+          statusBanner.innerHTML = `<span class="inline-block w-2.5 h-2.5 rounded-full bg-indigo-500 animate-pulse"></span> Timer Setup`;
+        } else {
+          // Locked timer running state
+          timerInputsContainer.classList.add('hidden');
+          displayTimeLocked.classList.remove('hidden');
+          displayTimeLocked.textContent = formatTime(currentSeconds);
+
+          if (!isCountdown) {
+            applyTheme('countingUp');
+            statusBanner.className = "mb-4 px-6 py-2 rounded-full bg-indigo-500/20 backdrop-blur-sm border border-indigo-400/30 text-sm font-semibold tracking-wide uppercase flex items-center gap-2 text-indigo-200";
+            statusBanner.innerHTML = `<span class="inline-block w-2.5 h-2.5 rounded-full bg-indigo-400 animate-ping"></span> Counting Up`;
+          } else {
+            // COUNTDOWN COLORS
+            const threeMinutes = 3 * 60; // 180 seconds
+
+            if (currentSeconds <= threeMinutes) {
+              // Critical alarm warning state (< 3 Minutes) -> Steady crimson flashing pace
+              body.classList.add('animate-steady-flash');
+              
+              timerBox.className = "bg-transition rounded-3xl p-6 md:p-12 shadow-2xl flex flex-col items-center justify-center w-full max-w-3xl min-h-[320px] md:min-h-[400px] relative overflow-hidden backdrop-blur-md bg-rose-900/40 border-rose-500/50 text-rose-100";
+              glowRing.className = "absolute inset-0 border-[6px] rounded-3xl pointer-events-none transition-all duration-1000 border-rose-500/30 animate-pulse";
+              
+              statusBanner.className = "mb-4 px-6 py-2 rounded-full bg-rose-500/20 backdrop-blur-sm border border-rose-400/30 text-sm font-semibold tracking-wide uppercase flex items-center gap-2 text-rose-200 animate-pulse";
+              statusBanner.innerHTML = `<span class="inline-block w-2.5 h-2.5 rounded-full bg-rose-500 animate-ping"></span> Warning: Under 3 Minutes!`;
+              progressBar.className = "h-full bg-gradient-to-r from-rose-600 to-rose-400 w-full transition-all duration-300";
+            } else {
+              // Standard Active countdown -> Beautiful emerald green pace
+              applyTheme('green');
+              statusBanner.className = "mb-4 px-6 py-2 rounded-full bg-emerald-500/20 backdrop-blur-sm border border-emerald-400/30 text-sm font-semibold tracking-wide uppercase flex items-center gap-2 text-emerald-200";
+              statusBanner.innerHTML = `<span class="inline-block w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span> Counting Down`;
+              progressBar.className = "h-full bg-gradient-to-r from-emerald-600 to-emerald-400 w-full transition-all duration-300";
+            }
+          }
+        }
+      }
+    }
+
+    // Apply specific CSS coloring profiles to container wrapper safely
+    function applyTheme(themeKey) {
+      const theme = BG_THEMES[themeKey] || BG_THEMES.default;
+      body.className = "bg-transition min-h-screen flex flex-col justify-between font-sans select-none overflow-x-hidden " + theme.bodyClass;
+      timerBox.className = `bg-transition rounded-3xl p-6 md:p-12 shadow-2xl flex flex-col items-center justify-center w-full max-w-3xl min-h-[320px] md:min-h-[400px] relative overflow-hidden backdrop-blur-md ${theme.timerBoxClass}`;
+      glowRing.className = `absolute inset-0 border-[6px] rounded-3xl pointer-events-none transition-all duration-1000 ${theme.glowRingColor}`;
+    }
+
+    // Set timer mode setup
+    function setTimerMode(countdown) {
+      if (timerState === 'running' || timerState === 'paused') {
+        return; // Lock swapping modes when timer is currently counting
+      }
+      
+      isCountdown = countdown;
+      stopTimer();
+      timerState = 'idle';
+
+      if (isCountdown) {
+        tabCountdown.className = "flex-1 py-2 px-4 rounded-lg font-semibold text-sm transition-all flex items-center justify-center gap-2 bg-indigo-600 text-white shadow";
+        tabCountup.className = "flex-1 py-2 px-4 rounded-lg font-semibold text-sm transition-all flex items-center justify-center gap-2 text-white/70 hover:text-white hover:bg-white/5";
+        presetControls.classList.remove('hidden');
+        timerStateLabel.textContent = "Timer Ready • Tap any number above to edit";
+        
+        totalSeconds = getSecondsFromInputs();
+        currentSeconds = totalSeconds;
+      } else {
+        tabCountup.className = "flex-1 py-2 px-4 rounded-lg font-semibold text-sm transition-all flex items-center justify-center gap-2 bg-indigo-600 text-white shadow";
+        tabCountdown.className = "flex-1 py-2 px-4 rounded-lg font-semibold text-sm transition-all flex items-center justify-center gap-2 text-white/70 hover:text-white hover:bg-white/5";
+        presetControls.classList.add('hidden');
+        timerStateLabel.textContent = "Count Up Mode Ready";
+        currentSeconds = 0;
+      }
+      updateTimerDisplay();
+    }
+
+    // Starts countdown timer or stopwatch
+    function startTimer() {
+      audio.init(); // Initialize audio context safely
+      audio.stopAlarm(); // Halt any leftover ringing triggers
+      
+      if (isCountdown) {
+        // Enforce double digit format check immediately
+        formatInputsToTwoDigits();
+        totalSeconds = getSecondsFromInputs();
+        currentSeconds = totalSeconds;
+
+        if (currentSeconds <= 0) {
+          showToast("Please tap on the numbers to enter a duration first!", true);
+          return;
+        }
+      }
+
+      timerState = 'running';
+      timerStateLabel.textContent = isCountdown ? "Focusing Classroom..." : "Time Accruing...";
+      
+      btnStart.classList.add('hidden');
+      btnPause.classList.remove('hidden');
+      presetControls.classList.add('hidden');
+
+      timerInterval = setInterval(() => {
+        if (isCountdown) {
+          if (currentSeconds > 0) {
+            currentSeconds--;
+            updateTimerDisplay();
+            
+            // Play a sharp tick exactly on the last 10 seconds (10 down to 1)
+            if (currentSeconds <= 10 && currentSeconds > 0) {
+              audio.playSharpTick();
+            }
+          } else {
+            handleTimerComplete();
+          }
+        } else {
+          currentSeconds++;
+          updateTimerDisplay();
+        }
+      }, 1000);
+
+      updateTimerDisplay();
+    }
+
+    // Pause active running session
+    function pauseTimer() {
+      if (timerState !== 'running') return;
+      
+      clearInterval(timerInterval);
+      timerState = 'paused';
+      timerStateLabel.textContent = "Timer Paused";
+      
+      btnPause.classList.add('hidden');
+      btnStart.classList.remove('hidden');
+      btnStart.innerHTML = `<i class="fa-solid fa-play"></i> Resume`;
+      updateTimerDisplay();
+    }
+
+    // Clean active intervals
+    function stopTimer() {
+      if (timerInterval) {
+        clearInterval(timerInterval);
+        timerInterval = null;
+      }
+    }
+
+    // Fully reset current timer state back to base
+    function resetTimer() {
+      stopTimer();
+      audio.stopAlarm();
+      timerState = 'idle';
+      
+      btnPause.classList.add('hidden');
+      btnStart.classList.remove('hidden');
+      btnStart.innerHTML = `<i class="fa-solid fa-play"></i> Start Timer`;
+      
+      if (isCountdown) {
+        currentSeconds = totalSeconds;
+        timerStateLabel.textContent = "Timer Ready • Tap any number above to edit";
+        presetControls.classList.remove('hidden');
+      } else {
+        currentSeconds = 0;
+        timerStateLabel.textContent = "Count Up Ready";
+      }
+      updateTimerDisplay();
+    }
+
+    // Triggers upon reaching exactly 00:00:00
+    function handleTimerComplete() {
+      stopTimer();
+      timerState = 'finished';
+      timerStateLabel.textContent = "Time's up!";
+      
+      btnPause.classList.add('hidden');
+      btnStart.classList.remove('hidden');
+      btnStart.innerHTML = `<i class="fa-solid fa-rotate-right"></i> Restart`;
+      
+      // Play high-frequency alarming pattern for exactly 10 seconds
+      audio.playAlarmingTimesUp(soundSelect.value);
+      
+      showToast("Time is up!", true);
+      updateTimerDisplay();
+    }
+
+    // Bind Button Interaction Handlers
+    tabCountdown.addEventListener('click', () => setTimerMode(true));
+    tabCountup.addEventListener('click', () => setTimerMode(false));
+    
+    btnStart.addEventListener('click', startTimer);
+    btnPause.addEventListener('click', pauseTimer);
+    btnReset.addEventListener('click', resetTimer);
+
+    // Swap configurations through active loaded presets
+    document.querySelectorAll('.preset-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const target = e.currentTarget;
+        const totalSecs = parseInt(target.getAttribute('data-time'));
+        
+        if (timerState !== 'idle') {
+          resetTimer();
+        }
+        
+        isCountdown = true;
+        totalSeconds = totalSecs;
+        currentSeconds = totalSeconds;
+
+        // Populate preset numbers directly into user setup boxes
+        const h = Math.floor(totalSecs / 3600);
+        const m = Math.floor((totalSecs % 3600) / 60);
+        const s = totalSecs % 60;
+        
+        inputH.value = String(h).padStart(2, '0');
+        inputM.value = String(m).padStart(2, '0');
+        inputS.value = String(s).padStart(2, '0');
+        
+        setTimerMode(true);
+        updateTimerDisplay();
+        showToast(`Loaded Preset: ${target.innerText.trim().split('\n')[0]}`);
+      });
+    });
+
+    // Handle alarm test audio output trigger
+    btnTestSound.addEventListener('click', () => {
+      audio.playAlarmingTimesUp(soundSelect.value);
+      showToast(`Testing alarm sound for 10 seconds... Tap reset to stop.`);
+    });
+
+    // Keyboard Hotkey Actions
+    document.addEventListener('keydown', (e) => {
+      // Avoid hotkey interference when writing in input tags
+      if (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'SELECT') {
+        if (e.code === 'Enter') {
+          document.activeElement.blur(); // Dismiss active keypad
+        }
+        return;
+      }
+
+      if (e.code === 'Space') {
+        e.preventDefault();
+        if (timerState === 'running') {
+          pauseTimer();
+        } else {
+          startTimer();
+        }
+      } else if (e.key === 'r' || e.key === 'R') {
+        resetTimer();
+        showToast("Timer Reset");
+      }
+    });
+
+    // Fullscreen toggler
+    fullscreenBtn.addEventListener('click', () => {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen().catch(err => {
+          showToast(`Fullscreen error: ${err.message}`);
+        });
+        fullscreenBtn.innerHTML = `<i class="fa-solid fa-compress text-lg"></i>`;
+      } else {
+        document.exitFullscreen();
+        fullscreenBtn.innerHTML = `<i class="fa-solid fa-expand text-lg"></i>`;
+      }
+    });
+
+    // Sync current actual local clock display helper
+    function updateLocalClock() {
+      const now = new Date();
+      let hours = now.getHours();
+      const minutes = String(now.getMinutes()).padStart(2, '0');
+      const seconds = String(now.getSeconds()).padStart(2, '0');
+      const ampm = hours >= 12 ? 'PM' : 'AM';
+      hours = hours % 12 || 12;
+      document.getElementById('local-clock').textContent = `${hours}:${minutes}:${seconds} ${ampm}`;
+    }
+
+    // Initialize application local clock
+    updateLocalClock();
+    setInterval(updateLocalClock, 1000);
+    
+    // Sync start elements
+    formatInputsToTwoDigits();
+    updateTimerDisplay();
+  </script>
+</body>
+</html>
